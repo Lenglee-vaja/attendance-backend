@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic[email]
+motor
+opencv-python
+numpy
+scikit-learn
+insightface
+onnxruntime
+pandas
+bcrypt
+pyjwt
