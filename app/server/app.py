@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from server.routes.student import router as StudentRouter
+from server.routes.index import router as ApiRouter
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(StudentRouter, tags=["Student"], prefix="/student")
+app.include_router(ApiRouter, tags=["api"], prefix="/api")
 
 
 @app.get("/", tags=["Root"])

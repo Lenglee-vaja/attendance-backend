@@ -1,29 +1,33 @@
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
-from fastapi import File, UploadFile
 
 class StudentSchema(BaseModel):
     fullname: str = Field(...)
-    email: EmailStr = Field(...)
+    student_code: str = Field(...)
     phone: str = Field(...)
-    course_of_study: str = Field(...)
-    year: int = Field(..., gt=0, lt=4)
+    class_name: str = Field(...)
     session_id: str = Field(...)
     password: str = Field(...)
     class Config:
         schema_extra = {
             "example": {
                 "fullname": "John Doe",
-                "email": "fXyqQ@example.com",
-                "course_of_study": "Computer Science",
-                "year": 3,
+                "student_code": "fXyqQ@example.com",
+                "class_name": "Computer Science",
+                "phone": "2056941975",
                 "session_id": "09126a9d-ee51-43b1-ac96-e660ad695e1e"
             }
         }
+class TeacherSchema(BaseModel):
+    fullname: str = Field(...)
+    phone: str = Field(...)
+    password: str = Field(...)
+
+
 class UpdateStudentModel(BaseModel):
     fullname: Optional[str]
     email: Optional[EmailStr]
-    course_of_study: Optional[str]
+    class_name: Optional[str]
     year: Optional[int]
 
     class Config:
@@ -31,14 +35,10 @@ class UpdateStudentModel(BaseModel):
             "example": {
                 "fullname": "John Doe",
                 "email": "fXyqQ@example.com",
-                "course_of_study": "Computer Science",
+                "class_name": "Computer Science",
                 "year": 3
             }
         }
-
-class StudentData(BaseModel):
-    fullname: str
-    file: UploadFile = File(...)
 
 
 class StudentLoginSchema(BaseModel):

@@ -1,60 +1,81 @@
 from server.database.index import attendance_collection, student_collection
-from server.helper.student import student_helper, ml_search_algorithm
+from server.helper.student import student_helper, ml_search_algorithm, teacher_helper
 from server.config.index import faceApp
-from server.helper.index import ErrorResponseModel
 
+from fastapi import HTTPException
 from bson import ObjectId
 import cv2
 import numpy as np
-import os
-import logging
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
+from typing import Optional
+import pandas as pd
+from pymongo import DESCENDING
 
 
-
-logger = logging.getLogger(__name__)
 session_embeddings = {}
 SECRET_KEY = "lenglee@1234"
 class StudentController:
     def __init__(self, collection):
         self.collection = collection
-    async def face_prediction(self,image_test):
-        # step1: find the time
+    async def face_prediction(self, image_test):
+    # step 1: Find the time
+        face = "Unknown"
         current_time = str(datetime.now())
-        data_frame = self.collection.find()
-        # step1: take the test image and apply to insightface
+
+        # step 1: Take the test image and apply to insightface
         results = faceApp.get(image_test)
-        # step2: use loop the extract each embedding and past to ml_search_algorithem
+
+        # step 2: Use loop to extract each embedding and pass to ml_search_algorithm
         for res in results:
             embeddings = res["embedding"]
-            _id = ml_search_algorithm(data_frame,test_vector=embeddings)
+            _id = await ml_search_algorithm(embeddings)
             if _id != "Unknown":
-                student_data = self.collection.find_one({"_id": ObjectId(_id)})
-                #save student_data to attendance collection
+                face = "Known"
+                # Fetch student data from MongoDB
+                student_data = await self.collection.find_one({"_id": ObjectId(_id)})
+
+                # Save student_data to attendance collection
                 student_attendance = {
-                    "student_id": _id,
-                    "student_number": student_data["student_number"],
+                    "student_id": str(student_data["_id"]),
+                    # "student_code": student_data["student_code"],
                     "phone": student_data["phone"],
                     "fullname": student_data["fullname"],
-                    "classroom": student_data["classroom"],
+                    "class_name": student_data["class_name"],
                     "time": current_time
                 }
                 await attendance_collection.insert_one(student_attendance)
-        return _id
-    async def retrieve_students(self):
-        students = []
-        async for student in self.collection.find():
-            students.append(student_helper(student))
-        return students
+        
+        return face
+    
 
-    async def add_student(self, student_data: dict) -> dict:
+
+    #========================================auth===============================================
+
+    async def teacher_register(self, teacher_data: dict) -> dict:
+        find_teacher = await self.collection.find_one({"phone": teacher_data["phone"]})
+        if find_teacher:
+            raise HTTPException(status_code=409, detail="USER_ALREADY_EXISTS")
+        teacher_data["role"] = "teacher"
+        # Hash the password
+        password = teacher_data.get("password")
+        if password:
+            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            teacher_data["password"] = hashed_password
+
+        teacher = await self.collection.insert_one(teacher_data)
+        new_teacher = await self.collection.find_one({"_id": teacher.inserted_id})
+        token = self.generate_token(new_teacher["_id"], new_teacher["role"])
+        return teacher_helper(new_teacher), token
+
+    async def student_register(self, student_data: dict) -> dict:
+        find_student = await self.collection.find_one({"phone": student_data["phone"]})
+        if find_student:
+            raise HTTPException(status_code=409, detail="USER_ALREADY_EXISTS")
         session_id = student_data.get("session_id")
-        print("session_id", session_id)
-        print("embeddings", session_embeddings)
         if session_id not in session_embeddings or not session_embeddings[session_id]:
-            return "embedding_false"
+            raise HTTPException(status_code=409, detail="SESSION_NOT_FOUND")
         x_array = np.array(session_embeddings[session_id], dtype=np.float32)
         x_mean = x_array.mean(axis=0)
         x_mean = x_mean.astype(np.float32)
@@ -65,77 +86,68 @@ class StudentController:
         if password:
             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
             student_data["password"] = hashed_password
-
         student = await self.collection.insert_one(student_data)
         del session_embeddings[session_id]
         new_student = await self.collection.find_one({"_id": student.inserted_id})
-        return student_helper(new_student)
+        token = self.generate_token(new_student["_id"], new_student["role"])
+        return student_helper(new_student), token
 
     async def get_embedding(self, frame, session_id):
         results = faceApp.get(frame, max_num=1)
-        embeddings = None
         for res in results:
-            x1, y1, x2, y2 = res["bbox"].astype(int)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
-            text = "ດີຫຼາຍ"
-            cv2.putText(frame, text, (x1, y1), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 0), 2)
             embedding = res["embedding"]
             if embedding is not None:
                 session_embeddings[session_id].append(embedding)
         return frame
-    async def login_student(self, student_data: dict) -> dict:
+    async def user_login(self, student_data: dict) -> dict:
         phone = student_data.get("phone")
         password = student_data.get("password")
 
-        student = await self.collection.find_one({"phone": phone})
+        user = await self.collection.find_one({"phone": phone})
         
-        if not student:
-            return {"error": "Invalid email or password"}
+        if not user:
+            raise HTTPException(status_code=404, detail="USER_NOT_FOUND")
 
-        if bcrypt.checkpw(password.encode('utf-8'), student["password"]):
-            token = self.generate_token(student["_id"], student["role"])
-            return token, student_helper(student)
+        if bcrypt.checkpw(password.encode('utf-8'), user["password"]):
+            token = self.generate_token(user["_id"], user["role"])
+            if user["role"] == "student":
+                return token, student_helper(user)
+            else:
+                return token, teacher_helper(user)
+            
         else:
-            return {"error": "Invalid email or password"}
-    def generate_token(self, student_id: str, role: str) -> str:
+            raise HTTPException(status_code=401, detail="INVALID_PASSWORD")
+    def generate_token(self, user_id: str, role: str) -> str:
         payload = {
-            "student_id": str(student_id),
+            "_id": str(user_id),
             "role": role,
             "exp": datetime.utcnow() + timedelta(hours=24)  # Token expires in 24 hours
         }
         token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
         return token
-    async def register_student(self, student_data: dict) -> dict:
-        file = student_data.get("file")
+    
 
-        if file is None:
-            return ErrorResponseModel("Error", 400, "File not provided")
 
-        # Read the image file in binary mode
-        image_data = await file.read()
+    #========================================crud student===============================================
 
-        # Decode the image data using OpenCV
-        image_array = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-        if image is None:
-            return ErrorResponseModel("Error", 400, "Invalid image format")
-        # Process the image and continue with your logic
-        results = faceApp.get(image, max_num=1)
-        if not results:
-            return ErrorResponseModel("Error", 400, "No face detected")
-        print("after results")
-        embeddings = results[0]["embedding"]
-        np.savetxt("face_embedding.txt", embeddings)
-        x_array = np.loadtxt("face_embedding.txt", dtype=np.float32)
-        received_samples = int(x_array.size / 512)
-        x_array = x_array.reshape(received_samples, 512)
-        x_mean = x_array.mean(axis=0).astype(np.float32).tolist()
-        student_data["facial_features"] = x_mean
-        await self.collection.insert_one(student_data)
-        os.remove("face_embedding.txt")
+    async def retrieve_students(self, search: Optional[str] = None):
+        students = []
+        query = {"role": "student"}  # Include the role condition in the query
+        sort_order = [("time", DESCENDING)]  # Assuming you have a field like "created_at" to sort by
 
-        return {"message": "Student added successfully"}
+        
+        if search:
+            query["$or"] = [
+                {"fullname": {"$regex": search, "$options": "i"}},
+                {"class_name": {"$regex": search, "$options": "i"}},
+                {"student_code": {"$regex": search, "$options": "i"}},
+            ]
+        
+        async for c in self.collection.find(query).sort(sort_order):
+            students.append(student_helper(c))
+        
+        return students
 
     async def retrieve_student(self, id: str) -> dict:
         student = await self.collection.find_one({"_id": ObjectId(id)})
