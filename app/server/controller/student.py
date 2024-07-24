@@ -19,7 +19,7 @@ SECRET_KEY = "lenglee@1234"
 class StudentController:
     def __init__(self, collection):
         self.collection = collection
-    async def face_prediction(self, image_test):
+    async def face_prediction(self, image_test, class_code):
     # step 1: Find the time
         face = "Unknown"
         current_time = str(datetime.now())
@@ -36,10 +36,16 @@ class StudentController:
                 # Fetch student data from MongoDB
                 student_data = await self.collection.find_one({"_id": ObjectId(_id)})
 
+                checkPresent = await attendance_collection.find_one({"class_code": class_code, "student_id": str(student_data["_id"])})
+                if checkPresent:
+                    face = "Present"
+                    return face
+
                 # Save student_data to attendance collection
                 student_attendance = {
+                    "class_code": class_code,
                     "student_id": str(student_data["_id"]),
-                    # "student_code": student_data["student_code"],
+                    "student_code": student_data["student_code"],
                     "phone": student_data["phone"],
                     "fullname": student_data["fullname"],
                     "class_name": student_data["class_name"],
@@ -148,6 +154,18 @@ class StudentController:
             students.append(student_helper(c))
         
         return students
+    
+    async def count_students(self, search: Optional[str] = None):
+        query = {"role": "student"}  # Include the role condition in the query
+        if search:
+            query["$or"] = [
+                {"fullname": {"$regex": search, "$options": "i"}},
+                {"class_name": {"$regex": search, "$options": "i"}},
+                {"student_code": {"$regex": search, "$options": "i"}},
+            ]
+        
+        count = await self.collection.count_documents(query)
+        return count
 
     async def retrieve_student(self, id: str) -> dict:
         student = await self.collection.find_one({"_id": ObjectId(id)})

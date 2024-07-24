@@ -3,6 +3,7 @@ from fastapi.encoders import jsonable_encoder
 from server.controller.student import student_controller
 from server.controller.class_room import class_controller
 from server.controller.class_name import class_name_controller
+from server.controller.attendance import attendance_controller
 from server.config.index import faceApp
 import uuid
 from typing import List
@@ -37,12 +38,13 @@ router = APIRouter()
 #========================================detect=============================================
 
 @router.post("/detect", response_description="detect")
-async def detect_frames(files: List[UploadFile] = File(...)):
+async def detect_frames(files: List[UploadFile] = File(...), class_code: str = Query(...)):
+    print("class_code ============>", class_code)
     for file in files:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        data = await student_controller.face_prediction(img)
+        data = await student_controller.face_prediction(img, class_code)
     return ResponseModel(data, "SUCCESSFULLY")
 
 
@@ -88,6 +90,13 @@ async def retrieve_students(
     classes = await student_controller.retrieve_students(search)
     return ResponseModels(classes, "SUCCESSFULLY")
 
+@router.get("/student/count", response_description="count all students")
+async def retrieve_students(
+    search: Optional[str] = Query(None, description="Search count students"),
+    payload: dict = Depends(verify_jwt_token_and_role)
+):
+    classes = await student_controller.count_students(search)
+    return ResponseModels(classes, "SUCCESSFULLY")
 
 
 
@@ -138,4 +147,23 @@ async def retrieve_class_names(
     search: Optional[str] = Query(None, description="Search query to filter class name")
 ):
     classes = await class_name_controller.retrieve_class_names(search)
+    return ResponseModels(classes, "SUCCESSFULLY")
+
+
+#==========================================Attendance================================================
+
+@router.get("/attendances", response_description="retrieve all students")
+async def retrieve_attendances(
+    search: Optional[str] = Query(None, description="Search query to filter classes"),
+    payload: dict = Depends(verify_jwt_token_and_role)
+):
+    classes = await attendance_controller.retrieve_attendances(search)
+    return ResponseModels(classes, "SUCCESSFULLY")
+
+@router.get("/attendance/count", response_description="count all attendance")
+async def count_attendances(
+    search: Optional[str] = Query(None, description="Search count attendance"),
+    payload: dict = Depends(verify_jwt_token_and_role)
+):
+    classes = await attendance_controller.count_attendances(search)
     return ResponseModels(classes, "SUCCESSFULLY")
