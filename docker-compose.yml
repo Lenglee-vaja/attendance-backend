@@ -1,0 +1,12 @@
+version: "3.8" # Specify the version of Docker Compose
+
+services:
+  web:
+    build: .
+    command: python app/main.py
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
