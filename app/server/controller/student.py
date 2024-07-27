@@ -137,12 +137,12 @@ class StudentController:
     #========================================crud student===============================================
 
 
-    async def retrieve_students(self, search: Optional[str] = None):
+    async def retrieve_students(self,search: Optional[str] = None):
         students = []
         query = {"role": "student"}  # Include the role condition in the query
         sort_order = [("time", DESCENDING)]  # Assuming you have a field like "created_at" to sort by
 
-        
+        print("searcher======>", query)
         if search:
             query["$or"] = [
                 {"fullname": {"$regex": search, "$options": "i"}},
@@ -156,7 +156,8 @@ class StudentController:
         return students
     
     async def count_students(self, search: Optional[str] = None):
-        query = {"role": "student"}  # Include the role condition in the query
+        query = {"role": "student"} 
+        print("query count======>", search) # Include the role condition in the query
         if search:
             query["$or"] = [
                 {"fullname": {"$regex": search, "$options": "i"}},

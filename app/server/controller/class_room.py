@@ -62,9 +62,9 @@ class ClassRoomController:
         new_class = await self.collection.find_one({"_id": add_class.inserted_id})
         return class_helper(new_class)
 
-    async def retrieve_classes(self, search: Optional[str] = None):
+    async def retrieve_classes(self,teacher_id: str, search: Optional[str] = None):
         classes = []
-        query = {}
+        query = {"teacher_id": teacher_id}
         sort_order = [("time", DESCENDING)]  # Assuming you have a field like "created_at" to sort by
 
         if search:
@@ -73,7 +73,7 @@ class ClassRoomController:
                 {"class_code": {"$regex": search, "$options": "i"}},
                 {"subject": {"$regex": search, "$options": "i"}},
             ]}
-
+        print("query======>", query)
         async for c in self.collection.find(query).sort(sort_order):
             classes.append(class_helper(c))
 

@@ -6,8 +6,8 @@ from server.controller.class_name import class_name_controller
 from server.controller.attendance import attendance_controller
 from server.config.index import faceApp
 import uuid
-from typing import List
-from typing import Optional
+from typing import Optional, List
+
 
 
 import numpy as np
@@ -116,7 +116,8 @@ async def retrieve_classes(
     search: Optional[str] = Query(None, description="Search query to filter classes"),
     payload: dict = Depends(verify_jwt_token_and_role)
 ):
-    classes = await class_controller.retrieve_classes(search)
+    teacher_id = payload.get("_id")
+    classes = await class_controller.retrieve_classes(teacher_id, search)
     return ResponseModels(classes, "SUCCESSFULLY")
 
 
@@ -154,10 +155,11 @@ async def retrieve_class_names(
 
 @router.get("/attendances", response_description="retrieve all students")
 async def retrieve_attendances(
+    time: Optional[str] = Query(None, description="Search query to filter classes"),
     search: Optional[str] = Query(None, description="Search query to filter classes"),
     payload: dict = Depends(verify_jwt_token_and_role)
 ):
-    classes = await attendance_controller.retrieve_attendances(search)
+    classes = await attendance_controller.retrieve_attendances(time, search)
     return ResponseModels(classes, "SUCCESSFULLY")
 
 @router.get("/attendance/count", response_description="count all attendance")
