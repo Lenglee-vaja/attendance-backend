@@ -98,7 +98,15 @@ async def retrieve_students(
     classes = await student_controller.count_students(search)
     return ResponseModels(classes, "SUCCESSFULLY")
 
-
+@router.put("/student/{student_id}", response_description="update student")
+async def update_student(student_id: str, student: UpdateStudentModel = Body(...), payload: dict = Depends(verify_jwt_token_and_role)):
+    student = {k: v for k, v in student.dict().items() if v is not None}
+    if len(student) >= 1:
+        update_result = await student_controller.update_student(student_id, student)
+        if update_result.modified_count == 1:
+            return ResponseModel("Student with ID: {0} was updated".format(student_id), "SUCCESSFULLY")
+        else:
+            return ErrorResponseModel("Student with ID: {0} does not exist".format(student_id), 404, "STUDENT_DOES_NOT_EXIST")
 
 
 #===========================================class_room==================================================
